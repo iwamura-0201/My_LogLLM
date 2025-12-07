@@ -86,6 +86,9 @@ def sliding_window(raw_data, para):
     print('there are %d instances (sliding windows) in this dataset\n' % len(start_end_index_pair))
     return pd.DataFrame(new_data, columns=list(raw_data.columns)+['item_Label'])
 
+
+# -------------------------- log の正規化関連 ------------------------------------------------------------ #
+
 def log_to_dataframe(log_file, regex, headers, start_line, end_line):
     """ Function to transform log file to dataframe
     """

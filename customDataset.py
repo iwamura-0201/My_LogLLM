@@ -8,15 +8,15 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 #
 # patterns = [
-#     r'[a-zA-Z0-9]*:*([/\\]+[^/\\\s]+)+[/\\]*',  # 文件路径
-#     r'[a-zA-Z\.\:\-\_]*\d[a-zA-Z0-9\.\:\-\_]*',  # 中间一定要有数字  数字和字母和 . 或 : 或 - 的组合
+#     r'[a-zA-Z0-9]*:*([/\\]+[^/\\\s]+)+[/\\]*',  # ファイルパス
+#     r'[a-zA-Z\.\:\-\_]*\d[a-zA-Z0-9\.\:\-\_]*',  # 数字を含む文字列
 #     # r'[a-zA-Z0-9]+\.[a-zA-Z0-9]+',
 # ]
 #
-# # 合并所有模式
+# # すべてのパターンを結合
 # combined_pattern = '|'.join(patterns)
 #
-# # 替换函数
+# # 置換関数
 # def replace_patterns(text):
 #     return re.sub(combined_pattern, '<*>', text)
 
@@ -39,18 +39,46 @@ patterns = [
     r'[a-zA-Z\.\:\-\_]*\d[a-zA-Z0-9\.\:\-\_]*',  # word have number
 ]
 
-# 合并所有模式
+# すべてのパターンを結合
 combined_pattern = '|'.join(patterns)
 
-# 替换函数
+# 置換関数
 def replace_patterns(text):
+    """
+    ログメッセージの変数部分を<*>に置換する
+    
+    IPアドレス、ファイルパス、数値などの変数部分をマスクすることで、
+    ログテンプレートの抽出を容易にする。
+    
+    Args:
+        text: ログメッセージ文字列
+    
+    Returns:
+        str: 変数部分が<*>に置換されたログメッセージ
+    """
     text = re.sub(r'[\.]{3,}', '.. ', text)    # Replace multiple '.' with '.. '
     text = re.sub(combined_pattern, '<*>', text)
     return text
 
 
 class CustomDataset(Dataset):
+    """
+    ログシーケンスデータセット
+    
+    CSVファイルからログシーケンスを読み込み、変数部分をマスク（<*>）に置換する。
+    
+    CSVフォーマット:
+        - Content: ';-;'区切りのログメッセージシーケンス
+        - Label: 0=正常、1=異常
+    """
     def __init__(self, file_path, drop_duplicates=False):
+        """
+        データセットの初期化
+        
+        Args:
+            file_path: CSVファイルのパス
+            drop_duplicates: 重複するContentを削除するかどうか
+        """
         df = pd.read_csv(file_path)
         print('Number of normal samples in original dataset: {}'.format((df['Label'].values==0).sum()))
         print('Number of anomalous samples in original dataset: {}'.format((df['Label'].values==1).sum()))
@@ -76,7 +104,7 @@ class CustomDataset(Dataset):
 def merge_data(data):
     merged_data = []
 
-    # 记录每个子列表的开始位置
+    # 各サブリストの開始位置を記録
     start_positions = []
 
     current_position = 0
@@ -89,7 +117,19 @@ def merge_data(data):
 
 
 class BalancedSampler(Sampler):
+    """
+    クラス不均衡を調整するサンプラー
+    
+    少数クラス（異常）をオーバーサンプリングし、多数クラス（正常）とのバランスを調整する。
+    
+    Args:
+        dataset: CustomDatasetインスタンス
+        target_ratio: 少数クラスの目標割合（例: 0.3で30%）
+        max_samples: 最大サンプル数（Noneの場合は制限なし）
+        min_samples: 最小サンプル数（max_samplesがNoneの場合のみ有効）
+    """
     def __init__(self, dataset, target_ratio=0.3, max_samples=None, min_samples=50000):
+        """サンプラーの初期化"""
         self.labels = dataset.get_label()
         self.dataset = dataset
         self.target_ratio = target_ratio
@@ -159,13 +199,13 @@ class CustomCollator:
     def __call__(self, batch):
         sequences_, labels = zip(*batch)
 
-        # 截断每个子序列的长度
+        # 各シーケンスの長さを最大長で切り詰め
         sequences = [seq[:self.max_seq_len] for seq in sequences_]
 
         data, seq_positions = merge_data(sequences)
-        seq_positions = seq_positions[1:]  # 去掉第一个0位置，用于后续分界处理
+        seq_positions = seq_positions[1:]  # 最初の0位置を削除（後続の境界処理用）
 
-        # 将合并后的 data 编码
+        # 結合後のdataをエンコード
         inputs = self.tokenizer(
             data,
             return_tensors="pt",
@@ -174,7 +214,7 @@ class CustomCollator:
             truncation=True
         )
 
-        # 构建 label tensor
+        # ラベルテンソルを構築
         # labels_tensor = torch.tensor(labels, dtype=torch.long)
 
         labels = np.array(labels).astype(object)

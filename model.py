@@ -8,12 +8,22 @@ from torch import nn
 from peft import PeftModel, LoraConfig, prepare_model_for_kbit_training, get_peft_model, TaskType
 
 def merge_data(data):
+    """
+    複数のサブリストを1つのリストに結合し、各サブリストの開始位置を記録する
+    
+    Args:
+        data: サブリストのリスト（例: [[a, b], [c, d, e], [f]]）
+    
+    Returns:
+        tuple: (結合されたデータ, 各サブリストの開始位置のリスト)
+            例: ([a, b, c, d, e, f], [0, 2, 5])
+    """
     merged_data = []
 
-    # 用于记录每个子列表开始的位置
+    # 各サブリストの開始位置を記録
     start_positions = []
 
-    # 当前起始位置
+    # 現在の開始位置
     current_position = 0
 
     for sublist in data:
@@ -23,54 +33,74 @@ def merge_data(data):
     return merged_data, start_positions
 
 def stack_and_pad_right(tensors):
-    # 找到第一维度的最大长度
+    """
+    複数のテンソルを右パディング（末尾に0を追加）でスタックする
+    
+    Args:
+        tensors: テンソルのリスト（各テンソルの第一次元の長さは異なる可能性あり）
+    
+    Returns:
+        tuple: (スタックされたテンソル, パディングマスク)
+            パディングマスク: 1=実データ、0=パディング
+    """
+    # 第一次元の最大長を取得
     max_len = max(tensor.shape[0] for tensor in tensors)
 
-    # 创建一个存放结果的列表
+    # 結果を格納するリストを作成
     padded_tensors = []
     padding_masks = []
 
     for tensor in tensors:
-        # 计算需要填充的长度
+        # 必要なパディング長を計算
         pad_len = max_len - tensor.shape[0]
 
-        # 使用零填充
+        # ゼロでパディング
         padded_tensor = torch.nn.functional.pad(tensor, (0, 0, 0, pad_len))
         padded_tensors.append(padded_tensor)
 
-        # 创建填充位置的掩码
+        # パディング位置のマスクを作成
         padding_mask = torch.cat([torch.ones(tensor.shape[0], dtype=torch.long),
                                   torch.zeros(pad_len, dtype=torch.long)])
         padding_masks.append(padding_mask)
 
-    # 堆叠所有填充后的张量
+    # パディング後のテンソルをスタック
     stacked_tensor = torch.stack(padded_tensors)
     padding_masks = torch.stack(padding_masks)
 
     return stacked_tensor, padding_masks
 
 def stack_and_pad_left(tensors):
-    # 找到第一维度的最大长度
+    """
+    複数のテンソルを左パディング（先頭に0を追加）でスタックする
+    
+    Args:
+        tensors: テンソルのリスト（各テンソルの第一次元の長さは異なる可能性あり）
+    
+    Returns:
+        tuple: (スタックされたテンソル, パディングマスク)
+            パディングマスク: 1=実データ、0=パディング
+    """
+    # 第一次元の最大長を取得
     max_len = max(tensor.shape[0] for tensor in tensors)
 
-    # 创建一个存放结果的列表
+    # 結果を格納するリストを作成
     padded_tensors = []
     padding_masks = []
 
     for tensor in tensors:
-        # 计算需要填充的长度
+        # 必要なパディング長を計算
         pad_len = max_len - tensor.shape[0]
 
-        # 使用零填充
+        # ゼロでパディング
         padded_tensor = torch.nn.functional.pad(tensor, (0, 0, pad_len, 0))
         padded_tensors.append(padded_tensor)
 
-        # 创建填充位置的掩码
+        # パディング位置のマスクを作成
         padding_mask = torch.cat([torch.zeros(pad_len, dtype=torch.long),
                                  torch.ones(tensor.shape[0], dtype=torch.long)])
         padding_masks.append(padding_mask)
 
-    # 堆叠所有填充后的张量
+    # パディング後のテンソルをスタック
     stacked_tensor = torch.stack(padded_tensors)
     padding_masks = torch.stack(padding_masks)
 
@@ -84,7 +114,30 @@ bnb_config = BitsAndBytesConfig(
 )
 
 class LogLLM(nn.Module):
+    """
+    ログ異常検知のための大規模言語モデル
+    
+    BERTでログメッセージを埋め込み、Llamaでシーケンスの正常/異常を判定する。
+    ProjectorがBERTとLlamaの埋め込み空間を接続する。
+    
+    アーキテクチャ:
+        1. BERT: 各ログメッセージを768次元に埋め込み
+        2. Projector: 768次元 → 4096次元に射影
+        3. Llama: ログシーケンスを受け取り、"normal"/"anomalous"を生成
+    """
     def __init__(self, Bert_path, Llama_path, ft_path=None, is_train_mode=True, device = torch.device("cuda:0"), max_content_len = 128, max_seq_len = 128):
+        """
+        LogLLMモデルの初期化
+        
+        Args:
+            Bert_path: BERTモデルのパス
+            Llama_path: Llamaモデルのパス
+            ft_path: ファインチューニング済みモデルのパス（Noneの場合は新規作成）
+            is_train_mode: 学習モードかどうか
+            device: 使用するデバイス（CPU/GPU）
+            max_content_len: 各ログメッセージの最大トークン数
+            max_seq_len: シーケンス内の最大ログメッセージ数
+        """
         super().__init__()
         self.max_content_len = max_content_len  # max length of each log messages (contents)
         self.max_seq_len = max_seq_len   # max length of each log sequence  (log sequence contains some log messages)
@@ -303,12 +356,12 @@ class LogLLM(nn.Module):
 
         this_peer_finished = False
         answer = []
-        past_key_values = DynamicCache()  # 新缓存对象
+        past_key_values = DynamicCache()  # 新しいキャッシュオブジェクト
 
 
         while not this_peer_finished:
             if len(past_key_values) == 0:
-                # 初始轮：传完整 inputs_embeds
+                # 初回: 完全なinputs_embedsを渡す
                 outputs = self.Llama_model(
                     inputs_embeds=inputs_embeds,
                     attention_mask=attention_mask,
@@ -316,7 +369,7 @@ class LogLLM(nn.Module):
                     use_cache=True,
                 )
             else:
-                # 后续轮：只传一个 token 的 embedding（即上一步预测的 token）
+                # 2回目以降: 1トークンのembeddingのみを渡す（前ステップで予測したトークン）
                 outputs = self.Llama_model(
                     inputs_embeds=next_tokens_embeddings[:, None, :],
                     attention_mask=attention_mask,
@@ -328,7 +381,7 @@ class LogLLM(nn.Module):
             next_token_logits = logits[:, -1, :]
             next_tokens = torch.argmax(next_token_logits, dim=-1)
 
-            # 应对结束符逻辑
+            # 終了トークンの処理
             next_tokens = next_tokens * unfinished_sequences + pad_token_id * (1 - unfinished_sequences)
             answer.append(next_tokens)
 

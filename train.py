@@ -1,3 +1,18 @@
+"""
+LogLLMモデルの学習スクリプト
+
+4段階の学習プロセス:
+1. Phase 1: Llamaのみを学習
+2. Phase 2-1: Projectorのみを学習
+3. Phase 2-2: ProjectorとBERTを学習
+4. Phase 3: 全体をファインチューニング
+
+使用方法:
+    1. dataset_name、data_path、Bert_path、Llama_pathを設定
+    2. python train.py を実行
+    3. ft_model_{dataset_name}/ にファインチューニング済みモデルが保存される
+"""
+
 import os
 from pathlib import Path
 import numpy as np
@@ -70,6 +85,19 @@ def print_number_of_trainable_model_parameters(model):
 
 
 def trainModel(model, dataloader, gradient_accumulation_steps, n_epochs, lr):
+    """
+    LogLLMモデルの学習関数
+    
+    勾配累積を使用し、メモリ効率的に学習を行う。
+    学習中は損失とaccuracyを追跡し、指数関数的な学習率減衰を適用。
+    
+    Args:
+        model: LogLLMモデル
+        dataloader: データローダー
+        gradient_accumulation_steps: 勾配累積ステップ数
+        n_epochs: エポック数
+        lr: 学習率
+    """
     criterion = nn.CrossEntropyLoss(reduction='mean')
 
     trainable_model_params = print_number_of_trainable_model_parameters(model)
@@ -110,9 +138,9 @@ def trainModel(model, dataloader, gradient_accumulation_steps, n_epochs, lr):
             # print(loss)
 
             if ((i_th + 1) % gradient_accumulation_steps == 0) or ((i_th + 1) == len(dataloader)):
-                # optimizer the net
-                optimizer.step()  # 更新网络参数
-                optimizer.zero_grad()  # reset grdient # 清空过往梯度
+                # ネットワークを最適化
+                optimizer.step()  # ネットワークパラメータを更新
+                optimizer.zero_grad()  # 勾配をリセット
 
             acc_mask = torch.zeros_like(targets,device=device).bool()
             for token in special_normal_tokens.union(special_anomalous_tokens):

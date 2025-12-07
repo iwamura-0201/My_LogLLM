@@ -1,3 +1,15 @@
+"""
+LogLLMモデルの評価スクリプト
+
+ファインチューニング済みモデルを使用して、テストデータセットで評価を実行。
+Precision、Recall、F1スコア、Accuracyを計算する。
+
+使用方法:
+    1. dataset_name、data_path、ft_pathを設定
+    2. python eval.py を実行
+    3. コンソールに評価結果が表示される
+"""
+
 import os
 import re
 from pathlib import Path
