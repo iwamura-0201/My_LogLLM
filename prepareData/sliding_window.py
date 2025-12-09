@@ -58,12 +58,15 @@ def main(
         raise Exception('missing valid log format')
     print(f'Auto log_format: {log_format}')
 
-    # 一旦Drainによるパースをそのまま利用（12/8時点）
-    # structure_log(data_dir, output_dir, log_name, log_format, start_line = start_line, end_line = end_line)
+    # ログの正規化ではなく、構造化を行うコードらしい。
+    # windowsログはすでにcsvへ構造化済みなので、この処理はスキップ。
+    # structure_log(data_dir, output_dir, log_filename, log_format, start_line = start_line, end_line = end_line)
 
     # ----------------------------- ここからwindow分割処理 ---------------------------------#
 
     print(f'window_size: {window_size}; step_size: {step_size}')
+
+    output_dir.mkdir(exist_ok=True)
 
     train_ratio = 0.8
 
@@ -140,8 +143,8 @@ def main(
     num_normal_test = len(session_test_df['Label']) - session_test_df['Label'].sum()
 
 
-    session_train_df.to_csv(os.path.join(output_dir, 'train.csv'),index=False)
-    session_test_df.to_csv(os.path.join(output_dir, 'test.csv'),index=False)
+    session_train_df.to_csv(output_dir/'train.csv',index=False)
+    session_test_df.to_csv(output_dir/'test.csv',index=False)
 
     print('Train dataset info:')
     print(f"max session length: {max_session_train_len}; mean session length: {mean_session_train_len}\n")

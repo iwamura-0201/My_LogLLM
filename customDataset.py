@@ -82,7 +82,8 @@ class CustomDataset(Dataset):
         df = pd.read_csv(file_path)
         print('Number of normal samples in original dataset: {}'.format((df['Label'].values==0).sum()))
         print('Number of anomalous samples in original dataset: {}'.format((df['Label'].values==1).sum()))
-        df['Content'] = df['Content'].apply(replace_patterns)
+        # Contentの正規化処理。Drain済みを用いるので今回は不要（12/8時点）
+        #df['Content'] = df['Content'].apply(replace_patterns)
         if drop_duplicates:
             df = df.drop_duplicates(subset='Content', keep='first')
         contents = df['Content'].values
