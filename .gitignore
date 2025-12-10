@@ -1,3 +1,7 @@
 **/__pycache__/**
-data/
+data/** 
 .venv
+ft_model_*/
+data.zip
+id_fix_log_v2.txt
+troubleshoot_nvidia.sh

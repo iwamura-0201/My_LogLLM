@@ -140,6 +140,13 @@ class BalancedSampler(Sampler):
         self.normal_indices = np.where(self.labels == 0)[0]
         self.anomalous_indices = np.where(self.labels == 1)[0]
 
+        # 異常データが無い場合、エラー
+        if len(self.normal_indices) == 0 or len(self.anomalous_indices) == 0:
+            raise ValueError(
+                f"BalancedSampler requires both normal and anomalous samples. "
+                f"Found {len(self.normal_indices)} normal and {len(self.anomalous_indices)} anomalous samples."
+            )
+
         self.minority_indices = (
             self.anomalous_indices if len(self.anomalous_indices) < len(self.normal_indices)
             else self.normal_indices

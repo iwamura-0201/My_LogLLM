@@ -72,3 +72,8 @@ dependencies = [
     "xxhash==3.5.0",
     "yarl==1.15.2",
 ]
+
+[dependency-groups]
+dev = [
+    "ipykernel>=7.1.0",
+]
